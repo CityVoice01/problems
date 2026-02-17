@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>OpenSolve</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/leaflet/leaflet.css">
+    <script src="/static/leaflet/leaflet.js"></script>
+
+</head>
+
+<body>
+
+    <div class="nav">
+        <h2>OpenSolve</h2>
+
+        <div class="nav-center">
+            <a href="/post">Post</a>
+            <a href="/leaderboard">Leaderboard</a>
+        </div>
+
+        <div class="nav-right">
+            Welcome {{session['username']}}
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+
+    <div class="banner">
+
+        <button class="arrow left" onclick="prevSlide()">❮</button>
+
+        <div class="slides" id="slides">
+            <div class="slide">
+                <img src="/static/banner/road.jpg">
+                <div class="caption">Road Damage Issues</div>
+            </div>
+
+            <div class="slide">
+                <img src="/static/banner/water.jpg">
+                <div class="caption">Water Pipe Leakage</div>
+            </div>
+
+            <div class="slide">
+                <img src="/static/banner/light.jpg">
+                <div class="caption">Street Light Problems</div>
+            </div>
+        </div>
+
+        <button class="arrow right" onclick="nextSlide()">❯</button>
+
+        <div class="dots" id="dots"></div>
+
+    </div>
+
+
+    <div class="grid">
+        {% for p in problems %}
+
+        <div class="card">
+
+
+
+            <!-- IMAGE -->
+            {% if p[5] %}
+            <a href="/problem/{{p[0]}}">
+                <img src="/static/uploads/{{ p[5] }}" class="thumb">
+            </a>
+
+            {% endif %}
+
+            <!-- TITLE & DESCRIPTION -->
+            <h3>{{ p[1] }}</h3>
+            <p>{{ p[2][:80] }}...</p>
+
+            <p class="post-meta">
+                Posted by <b>{{p[7]}}</b> • {{p[9]}}
+            </p>
+
+            <!-- BOTTOM SECTION -->
+            <div class="bottom">
+
+                <div class="vote-count">
+                    👍 {{ p[6] }}
+                </div>
+
+                <div class="btns">
+                    <a href="/vote/{{p[0]}}">
+                        <button class="btn-upvote">Upvote</button>
+                    </a>
+
+                    <a href="/solution/{{p[0]}}">
+                        <button class="btn-solution">Solution</button>
+                    </a>
+
+                    {% if p[7] == session['username'] %}
+                    <form action="/delete/{{p[0]}}" method="post" style="display:inline;">
+                        <button type="submit" class="btn-delete">❌</button>
+                    </form>
+                    {% endif %}
+                </div>
+
+            </div>
+
+
+        </div>
+
+        {% endfor %}
+    </div>
+
+
+
+    <script>
+        var map = L.map('map', {
+            dragging: false,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+            boxZoom: false,
+            keyboard: false,
+            zoomControl: false
+        }).setView([23.03, 72.58], 11);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        var bounds = [];
+
+        {% for p in problems %}
+        var lat = parseFloat("{{p[3]}}");
+        var lng = parseFloat("{{p[4]}}");
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+            var marker = L.marker([lat, lng]).addTo(map)
+                .bindPopup("<b>{{p[1]}}</b><br>{{p[2]}}");
+
+            bounds.push([lat, lng]);
+        }
+        {% endfor %}
+
+        if (bounds.length > 0) {
+            map.fitBounds(bounds);
+        }
+    </script>
+
+    <script>
+        let index = 0;
+        const slides = document.getElementById("slides");
+        const totalSlides = document.querySelectorAll(".slide").length;
+        const dots = document.querySelectorAll(".dot");
+
+        function updateSlide() {
+            slides.style.transform = "translateX(-" + (index * 100) + "%)";
+
+            dots.forEach(dot => dot.classList.remove("active"));
+            if (dots[index]) {
+                dots[index].classList.add("active");
+            }
+        }
+
+        function nextSlide() {
+            index++;
+            if (index >= totalSlides) index = 0;
+            updateSlide();
+        }
+
+        function prevSlide() {
+            index--;
+            if (index < 0) index = totalSlides - 1;
+            updateSlide();
+        }
+
+        updateSlide();
+    </script>
+
+
+
+</body>
+
+</html>

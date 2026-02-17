@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Leaderboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body class="post-body">
+
+    <!-- NAVBAR -->
+    <div class="nav">
+        <h2>OpenSolve</h2>
+
+        <div class="nav-center">
+            <a href="/home">Home</a>
+            <a href="/post">Post</a>
+        </div>
+
+        <div class="nav-right">
+            Welcome {{session['username']}}
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+
+    <!-- LEADERBOARD BOX -->
+    <div class="post-container">
+        <div class="post-box leaderboard-box">
+
+            <h2>🏆 Leaderboard</h2>
+            <p class="subtitle">Top community contributors</p>
+
+            <div class="leaderboard-list">
+
+                {% for u in users %}
+                <div
+                    class="leader-item {% if loop.index == 1 %}first{% elif loop.index == 2 %}second{% elif loop.index == 3 %}third{% endif %}">
+
+                    <div class="rank">
+                        #{{loop.index}}
+                    </div>
+
+                    <div class="username">
+                        {{u[0]}}
+                    </div>
+
+                    <div class="score">
+                        {{u[1]}} pts
+                    </div>
+
+                </div>
+                {% endfor %}
+
+            </div>
+
+        </div>
+    </div>
+
+</body>
+
+</html>

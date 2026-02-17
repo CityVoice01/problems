@@ -1,0 +1,51 @@
+<link rel="stylesheet" href="/static/style.css">
+
+<div class="nav">
+    <h2>OpenSolve</h2>
+    <div>
+        <a href="/home">Home</a>
+        <a href="/leaderboard">Leaderboard</a>
+        <a href="/logout">Logout</a>
+    </div>
+</div>
+
+<div class="solution-container">
+
+    <!-- SOLUTION BOX -->
+    <div class="solution-card">
+        <h2>AI Suggested Solution</h2>
+        <pre>{{solution}}</pre>
+    </div>
+
+    <!-- COMMENT BOX -->
+    <div class="comment-card">
+
+        <div class="comment-field">
+            <span class="comment-title">Write Comment</span>
+
+            <form method="POST">
+                <textarea name="comment" required></textarea>
+                <button type="submit">Post Comment</button>
+            </form>
+        </div>
+
+    </div>
+
+
+    <!-- COMMENTS LIST -->
+    <div class="all-comments">
+        <h3>All Comments</h3>
+
+        {% for c in comments %}
+        <div class="comment">
+            <div class="comment-top">
+                <b>{{c[0]}}</b>
+                <span>{{c[2]}}</span>
+            </div>
+            <p>{{c[1]}}</p>
+        </div>
+        {% endfor %}
+
+    </div>
+
+</div>

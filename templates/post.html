@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Post Problem - OpenSolve</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+
+<body class="post-body">
+
+    <!-- ===== NAVBAR ===== -->
+    <div class="nav">
+        <h2>OpenSolve</h2>
+
+        <div class="nav-center">
+            <a href="/home">Home</a>
+            <a href="/leaderboard">Leaderboard</a>
+        </div>
+
+        <div class="nav-right">
+            Welcome {{session['username']}}
+            <a href="/logout">Logout</a>
+        </div>
+    </div>
+
+
+    <!-- ===== POST SECTION ===== -->
+    <div class="post-container">
+
+        <div class="post-box">
+
+            <h2>Post a Problem</h2>
+            <p class="subtitle">Click on map to select location</p>
+
+            <form method="POST" enctype="multipart/form-data" onsubmit="return validateLocation()">
+
+                <input type="text" name="title" placeholder="Problem Title" required>
+
+                <textarea name="description" placeholder="Describe the problem..." required></textarea>
+
+                <!-- MAP -->
+                <div id="postMap"></div>
+
+                <!-- Hidden lat lng -->
+                <input type="hidden" name="lat" id="lat">
+                <input type="hidden" name="lng" id="lng">
+
+                <input type="file" name="image" accept="image/*">
+
+                <button type="submit" class="post-btn">
+                    Submit Problem
+                </button>
+
+            </form>
+
+        </div>
+    </div>
+
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+
+        // Create map
+        var map = L.map('postMap', {
+            zoomControl: true
+        }).setView([23.03, 72.58], 11);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        var marker;
+
+        // Click event
+        map.on('click', function (e) {
+
+            var lat = e.latlng.lat;
+            var lng = e.latlng.lng;
+
+            if (marker) {
+                map.removeLayer(marker);
+            }
+
+            marker = L.marker([lat, lng]).addTo(map);
+
+            document.getElementById("lat").value = lat;
+            document.getElementById("lng").value = lng;
+        });
+
+        // Validation before submit
+        function validateLocation() {
+            var lat = document.getElementById("lat").value;
+
+            if (!lat) {
+                alert("Please select location on map.");
+                return false;
+            }
+            return true;
+        }
+
+    </script>
+
+</body>
+
+</html>

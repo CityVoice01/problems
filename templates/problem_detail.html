@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>{{ problem[1] }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', sans-serif;
+            background: #f3f4f6;
+        }
+
+        /* ================= NAVBAR ================= */
+
+        .nav {
+            background: #111827;
+            color: white;
+            padding: 14px 5%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        .logo {
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .username {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+
+        .menu-toggle {
+            display: none;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        /* Mobile Navbar */
+        @media (max-width: 768px) {
+
+            .nav-links {
+                display: none;
+                flex-direction: column;
+                background: #1f2937;
+                position: absolute;
+                top: 60px;
+                right: 5%;
+                width: 200px;
+                padding: 15px;
+                border-radius: 8px;
+            }
+
+            .nav-links.active {
+                display: flex;
+            }
+
+            .menu-toggle {
+                display: block;
+            }
+        }
+
+        /* ================= MAIN CARD ================= */
+
+        .wrapper {
+            max-width: 850px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.07);
+        }
+
+        .detail-image {
+            width: 100%;
+            max-height: 380px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            color: #111827;
+        }
+
+        .meta {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 18px;
+        }
+
+        .description {
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            color: #374151;
+        }
+
+        #map {
+            height: 320px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .votes {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s ease;
+        }
+
+        .btn:hover {
+            background: #1e40af;
+        }
+
+        /* Mobile Card Adjustments */
+        @media (max-width: 600px) {
+            .wrapper {
+                margin: 20px auto;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            h2 {
+                font-size: 20px;
+            }
+
+            #map {
+                height: 250px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+
+    <div class="nav">
+
+        <div class="logo">OpenSolve</div>
+
+        <div class="menu-toggle" onclick="toggleMenu()">☰</div>
+
+        <div class="nav-links" id="navLinks">
+            <a href="/home">Home</a>
+            <a href="/leaderboard">Leaderboard</a>
+            <a href="/logout">Logout</a>
+            <span class="username">{{ session['username'] }}</span>
+        </div>
+
+    </div>
+
+    <!-- ================= CONTENT ================= -->
+
+    <div class="wrapper">
+        <div class="card">
+
+            <img src="/static/uploads/{{ problem[5] }}" class="detail-image">
+
+            <h2>{{ problem[1] }}</h2>
+
+            <div class="meta">
+                Posted by <b>{{ problem[7] }}</b> • {{ time_ago }}
+            </div>
+
+            <div class="description">
+                {{ problem[2] }}
+            </div>
+
+            <div id="map"></div>
+
+            <div class="bottom">
+                <div class="votes">
+                    👍 {{ problem[6] }} votes
+                </div>
+
+                <a href="/vote/{{ problem[0] }}">
+                    <button class="btn">Upvote</button>
+                </a>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ================= LEAFLET ================= -->
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        var lat = parseFloat("{{ problem[3] }}");
+        var lng = parseFloat("{{ problem[4] }}");
+
+        var map = L.map('map').setView([lat, lng], 15);
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        L.marker([lat, lng]).addTo(map);
+    </script>
+
+    <!-- ================= NAVBAR TOGGLE ================= -->
+
+    <script>
+        function toggleMenu() {
+            document.getElementById("navLinks")
+                .classList.toggle("active");
+        }
+    </script>
+
+</body>
+
+</html>
