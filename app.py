@@ -14,7 +14,7 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # ---------- DATABASE (PostgreSQL for Render) ----------
 DATABASE_URL = os.environ.get("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL)
+conn = psycopg2.connect(DATABASE_URL, sslmode="require")
 
 
 def get_cursor():
@@ -41,20 +41,26 @@ def time_ago(post_time):
 def login():
     error = ""
     if request.method == "POST":
-        u = request.form["username"]
-        p = request.form["password"]
+        try:
+            u = request.form["username"]
+            p = request.form["password"]
 
-        cur = get_cursor()
-        cur.execute("SELECT * FROM users WHERE username=%s", (u,))
-        user = cur.fetchone()
-        cur.close()
+            cur.execute("SELECT * FROM users WHERE username=%s", (u,))
+            user = cur.fetchone()
 
-        if user and user[2] == p:
-            session["username"] = u
-            return redirect("/home")
-        error = "Invalid username or password"
+            if user and user[2] == p:
+                session["username"] = u
+                return redirect("/home")
+            else:
+                error = "Invalid username or password"
+
+        except Exception as e:
+            conn.rollback()   # 🔥 VERY IMPORTANT
+            print("LOGIN ERROR =", e)
+            error = "Server error, try again"
 
     return render_template("login.html", error=error)
+
 
 
 # ---------- REGISTER ----------
@@ -270,3 +276,4 @@ def logout():
 # ---------- RUN ----------
 if __name__ == "__main__":
     app.run(debug=True)
+
