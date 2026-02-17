@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, session
 from datetime import datetime
-import mysql.connector
+import psycopg2
 import os
 from werkzeug.utils import secure_filename
 
@@ -12,14 +12,14 @@ UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# ---------- DATABASE ----------
-db = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="Harpalsinh@123",
-    database="website"
-)
-cur = db.cursor(buffered=True)
+# ---------- DATABASE (PostgreSQL for Render) ----------
+DATABASE_URL = os.environ.get("DATABASE_URL")
+conn = psycopg2.connect(DATABASE_URL)
+
+
+def get_cursor():
+    return conn.cursor()
+
 
 # ---------- TIME AGO ----------
 def time_ago(post_time):
@@ -44,8 +44,10 @@ def login():
         u = request.form["username"]
         p = request.form["password"]
 
+        cur = get_cursor()
         cur.execute("SELECT * FROM users WHERE username=%s", (u,))
         user = cur.fetchone()
+        cur.close()
 
         if user and user[2] == p:
             session["username"] = u
@@ -66,6 +68,7 @@ def register():
         password = request.form["password"]
         mobile = request.form["mobile"]
 
+        cur = get_cursor()
         cur.execute("SELECT * FROM users WHERE username=%s", (username_val,))
         if cur.fetchone():
             error = "Username not valid"
@@ -74,9 +77,12 @@ def register():
                 "INSERT INTO users(username,password,mobile,score) VALUES(%s,%s,%s,0)",
                 (username_val, password, mobile)
             )
-            db.commit()
+            conn.commit()
             session["username"] = username_val
+            cur.close()
             return redirect("/home")
+
+        cur.close()
 
     return render_template("register.html", error=error, username=username_val)
 
@@ -87,23 +93,19 @@ def home():
     if "username" not in session:
         return redirect("/")
 
-    db.reconnect()   # 🔥 FORCE fresh DB connection (cache avoid)
-
+    cur = get_cursor()
     cur.execute("""
         SELECT id,title,description,latitude,longitude,image,votes,username,created_at
-        FROM problems
-        ORDER BY id DESC
+        FROM problems ORDER BY id DESC
     """)
     rows = cur.fetchall()
-
-    print("PROBLEMS FROM DB =", len(rows))   # DEBUG
+    cur.close()
 
     problems = []
     for r in rows:
         problems.append(r + (time_ago(r[8]),))
 
     return render_template("index.html", problems=problems)
-
 
 
 # ---------- POST ----------
@@ -125,39 +127,46 @@ def post():
             filename = secure_filename(file.filename)
             file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
 
+        cur = get_cursor()
         cur.execute("""
             INSERT INTO problems(title,description,latitude,longitude,image,votes,username)
             VALUES(%s,%s,%s,%s,%s,0,%s)
         """, (title, desc, lat, lng, filename, session["username"]))
 
-        # Score = total posts * 5
-        cur.execute("SELECT COUNT(*) FROM problems WHERE username=%s", (session["username"],))
+        cur.execute("SELECT COUNT(*) FROM problems WHERE username=%s",
+                    (session["username"],))
         total_posts = cur.fetchone()[0]
 
         cur.execute("UPDATE users SET score=%s WHERE username=%s",
                     (total_posts * 5, session["username"]))
 
-        db.commit()
+        conn.commit()
+        cur.close()
+
         return redirect("/home")
 
     return render_template("post.html")
 
 
-# ---------- UPVOTE (NO SCORE) ----------
+# ---------- UPVOTE ----------
 @app.route("/vote/<int:id>")
 def vote(id):
     if "username" not in session:
         return redirect("/")
 
-    user = session["username"]
+    cur = get_cursor()
 
-    cur.execute("SELECT * FROM votes WHERE username=%s AND problem_id=%s", (user, id))
+    cur.execute("SELECT * FROM votes WHERE username=%s AND problem_id=%s",
+                (session["username"], id))
     if cur.fetchone():
+        cur.close()
         return redirect("/home")
 
-    cur.execute("INSERT INTO votes(username,problem_id) VALUES(%s,%s)", (user, id))
+    cur.execute("INSERT INTO votes(username,problem_id) VALUES(%s,%s)",
+                (session["username"], id))
     cur.execute("UPDATE problems SET votes=votes+1 WHERE id=%s", (id,))
-    db.commit()
+    conn.commit()
+    cur.close()
 
     return redirect("/home")
 
@@ -168,37 +177,38 @@ def delete(id):
     if "username" not in session:
         return redirect("/")
 
-    username = session["username"]
-
+    cur = get_cursor()
     cur.execute("SELECT username FROM problems WHERE id=%s", (id,))
     post = cur.fetchone()
 
     if not post:
+        cur.close()
         return redirect("/home")
 
     owner = post[0]
 
-    # Admin OR Owner can delete
-    if username == "Harpalsinh" or owner == username:
+    if session["username"] == "Harpalsinh" or owner == session["username"]:
         cur.execute("DELETE FROM problems WHERE id=%s", (id,))
 
-        # Recalculate score of owner
         cur.execute("SELECT COUNT(*) FROM problems WHERE username=%s", (owner,))
         total_posts = cur.fetchone()[0]
 
         cur.execute("UPDATE users SET score=%s WHERE username=%s",
                     (total_posts * 5, owner))
 
-        db.commit()
+        conn.commit()
 
+    cur.close()
     return redirect("/home")
 
 
 # ---------- SOLUTION + COMMENTS ----------
-@app.route("/solution/<int:id>", methods=["GET","POST"])
+@app.route("/solution/<int:id>", methods=["GET", "POST"])
 def solution(id):
     if "username" not in session:
         return redirect("/")
+
+    cur = get_cursor()
 
     if request.method == "POST":
         text = request.form["comment"]
@@ -207,7 +217,7 @@ def solution(id):
                 "INSERT INTO comments(problem_id,username,comment) VALUES(%s,%s,%s)",
                 (id, session["username"], text)
             )
-            db.commit()
+            conn.commit()
 
     cur.execute("SELECT title,description FROM problems WHERE id=%s", (id,))
     p = cur.fetchone()
@@ -217,6 +227,7 @@ def solution(id):
         FROM comments WHERE problem_id=%s ORDER BY id DESC
     """, (id,))
     comments = cur.fetchall()
+    cur.close()
 
     solution_text = f"""
 Problem: {p[0]}
@@ -241,8 +252,10 @@ def leaderboard():
     if "username" not in session:
         return redirect("/")
 
+    cur = get_cursor()
     cur.execute("SELECT username,score FROM users ORDER BY score DESC")
     users = cur.fetchall()
+    cur.close()
 
     return render_template("leaderboard.html", users=users)
 
@@ -253,8 +266,6 @@ def logout():
     session.clear()
     return redirect("/")
 
-cur.execute("SELECT DATABASE()")
-print("USING DB =", cur.fetchone())
 
 # ---------- RUN ----------
 if __name__ == "__main__":
