@@ -1,279 +1,229 @@
-from flask import Flask, render_template, request, redirect, session
-from datetime import datetime
+from flask import Flask, render_template, request, redirect, session, url_for
+from datetime import datetime, timezone
 import psycopg2
 import os
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = "opensolve_secret_key"
 
-# ---------- UPLOAD FOLDER ----------
+# Upload folder configuration
 UPLOAD_FOLDER = "static/uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# ---------- DATABASE (PostgreSQL for Render) ----------
-DATABASE_URL = os.environ.get("DATABASE_URL")
-conn = psycopg2.connect(DATABASE_URL, sslmode="require")
+def get_db_connection():
+    # Database connection URL
+    DATABASE_URL = "postgresql://postgres:Harpalsinh%40123@localhost:5432/website"
+    return psycopg2.connect(DATABASE_URL)
 
-
-def get_cursor():
-    return conn.cursor()
-
-
-# ---------- TIME AGO ----------
 def time_ago(post_time):
-    now = datetime.now()
+    if post_time is None: return "Just now"
+    now = datetime.now(timezone.utc) if post_time.tzinfo else datetime.now()
     diff = now - post_time
     sec = diff.total_seconds()
-
-    if sec < 60:
-        return f"{int(sec)} sec ago"
-    elif sec < 3600:
-        return f"{int(sec//60)} min ago"
-    elif sec < 86400:
-        return f"{int(sec//3600)} hr ago"
+    if sec < 60: return f"{int(sec)} sec ago"
+    elif sec < 3600: return f"{int(sec//60)} min ago"
+    elif sec < 86400: return f"{int(sec//3600)} hr ago"
     return f"{int(sec//86400)} days ago"
 
+# Filter register
+app.jinja_env.filters['time_ago'] = time_ago
 
-# ---------- LOGIN ----------
-@app.route("/", methods=["GET", "POST"])
+# ---------- ROUTES ----------
+
+@app.route("/")
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    error = ""
     if request.method == "POST":
-        try:
-            u = request.form["username"]
-            p = request.form["password"]
-
-            cur.execute("SELECT * FROM users WHERE username=%s", (u,))
-            user = cur.fetchone()
-
-            if user and user[2] == p:
-                session["username"] = u
-                return redirect("/home")
-            else:
-                error = "Invalid username or password"
-
-        except Exception as e:
-            conn.rollback()   # 🔥 VERY IMPORTANT
-            print("LOGIN ERROR =", e)
-            error = "Server error, try again"
-
-    return render_template("login.html", error=error)
-
-
-
-# ---------- REGISTER ----------
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    error = ""
-    username_val = ""
-
-    if request.method == "POST":
-        username_val = request.form["username"]
-        password = request.form["password"]
-        mobile = request.form["mobile"]
-
-        cur = get_cursor()
-        cur.execute("SELECT * FROM users WHERE username=%s", (username_val,))
-        if cur.fetchone():
-            error = "Username not valid"
-        else:
-            cur.execute(
-                "INSERT INTO users(username,password,mobile,score) VALUES(%s,%s,%s,0)",
-                (username_val, password, mobile)
-            )
-            conn.commit()
-            session["username"] = username_val
-            cur.close()
-            return redirect("/home")
-
+        u = request.form.get("username")
+        p = request.form.get("password")
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username=%s AND password=%s", (u, p))
+        user = cur.fetchone()
         cur.close()
+        conn.close()
+        if user:
+            session["username"] = u
+            return redirect(url_for('home'))
+        return render_template("login.html", error="Invalid login!")
+    return render_template("login.html")
 
-    return render_template("register.html", error=error, username=username_val)
-
-
-# ---------- HOME ----------
 @app.route("/home")
 def home():
-    if "username" not in session:
-        return redirect("/")
-
-    cur = get_cursor()
+    if "username" not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("""
-        SELECT id,title,description,latitude,longitude,image,votes,username,created_at
+        SELECT id, title, description, lat, lng, image_file, votes, username, created_at 
         FROM problems ORDER BY id DESC
     """)
-    rows = cur.fetchall()
+    probs = cur.fetchall()
     cur.close()
+    conn.close()
+    return render_template("index.html", problems=probs)
 
-    problems = []
-    for r in rows:
-        problems.append(r + (time_ago(r[8]),))
-
-    return render_template("index.html", problems=problems)
-
-
-# ---------- POST ----------
 @app.route("/post", methods=["GET", "POST"])
 def post():
-    if "username" not in session:
-        return redirect("/")
-
+    if "username" not in session: return redirect(url_for('login'))
     if request.method == "POST":
-        title = request.form["title"]
-        desc = request.form["description"]
-        lat = request.form["lat"]
-        lng = request.form["lng"]
-
-        file = request.files["image"]
-        filename = ""
-
-        if file and file.filename != "":
-            filename = secure_filename(file.filename)
-            file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
-
-        cur = get_cursor()
+        t = request.form.get("title")
+        d = request.form.get("description")
+        lat = request.form.get("lat")
+        lng = request.form.get("lng")
+        f = request.files.get("image")
+        
+        filename = secure_filename(f.filename) if f else ""
+        if f: f.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
         cur.execute("""
-            INSERT INTO problems(title,description,latitude,longitude,image,votes,username)
-            VALUES(%s,%s,%s,%s,%s,0,%s)
-        """, (title, desc, lat, lng, filename, session["username"]))
-
-        cur.execute("SELECT COUNT(*) FROM problems WHERE username=%s",
-                    (session["username"],))
-        total_posts = cur.fetchone()[0]
-
-        cur.execute("UPDATE users SET score=%s WHERE username=%s",
-                    (total_posts * 5, session["username"]))
-
+            INSERT INTO problems (title, description, lat, lng, image_file, username) 
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (t, d, lat, lng, filename, session["username"]))
+        cur.execute("UPDATE users SET score = score + 10 WHERE username=%s", (session["username"],))
         conn.commit()
         cur.close()
-
-        return redirect("/home")
-
+        conn.close()
+        return redirect(url_for('home'))
     return render_template("post.html")
 
-
-# ---------- UPVOTE ----------
 @app.route("/vote/<int:id>")
 def vote(id):
-    if "username" not in session:
-        return redirect("/")
-
-    cur = get_cursor()
-
-    cur.execute("SELECT * FROM votes WHERE username=%s AND problem_id=%s",
-                (session["username"], id))
-    if cur.fetchone():
-        cur.close()
-        return redirect("/home")
-
-    cur.execute("INSERT INTO votes(username,problem_id) VALUES(%s,%s)",
-                (session["username"], id))
-    cur.execute("UPDATE problems SET votes=votes+1 WHERE id=%s", (id,))
-    conn.commit()
-    cur.close()
-
-    return redirect("/home")
-
-
-# ---------- DELETE ----------
-@app.route("/delete/<int:id>", methods=["POST"])
-def delete(id):
-    if "username" not in session:
-        return redirect("/")
-
-    cur = get_cursor()
-    cur.execute("SELECT username FROM problems WHERE id=%s", (id,))
-    post = cur.fetchone()
-
-    if not post:
-        cur.close()
-        return redirect("/home")
-
-    owner = post[0]
-
-    if session["username"] == "Harpalsinh" or owner == session["username"]:
-        cur.execute("DELETE FROM problems WHERE id=%s", (id,))
-
-        cur.execute("SELECT COUNT(*) FROM problems WHERE username=%s", (owner,))
-        total_posts = cur.fetchone()[0]
-
-        cur.execute("UPDATE users SET score=%s WHERE username=%s",
-                    (total_posts * 5, owner))
-
+    if "username" not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO votes (user_id, problem_id) VALUES (%s, %s)", (session["username"], id))
+        cur.execute("UPDATE problems SET votes = votes + 1 WHERE id=%s", (id,))
         conn.commit()
+    except:
+        conn.rollback()
+    finally:
+        cur.close()
+        conn.close()
+    return redirect(url_for('home'))
 
-    cur.close()
-    return redirect("/home")
-
-
-# ---------- SOLUTION + COMMENTS ----------
-@app.route("/solution/<int:id>", methods=["GET", "POST"])
-def solution(id):
-    if "username" not in session:
-        return redirect("/")
-
-    cur = get_cursor()
-
-    if request.method == "POST":
-        text = request.form["comment"]
-        if text.strip():
-            cur.execute(
-                "INSERT INTO comments(problem_id,username,comment) VALUES(%s,%s,%s)",
-                (id, session["username"], text)
-            )
+@app.route("/delete/<int:id>", methods=["POST"])
+def delete_problem(id):
+    if "username" not in session: 
+        return redirect(url_for('login'))
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    # 1. Pehla check karo ke aa problem exist kare chhe ane user teno owner chhe?
+    cur.execute("SELECT username FROM problems WHERE id=%s", (id,))
+    problem = cur.fetchone()
+    
+    if problem and problem[0] == session["username"]:
+        try:
+            # 2. Problem delete karo
+            cur.execute("DELETE FROM problems WHERE id=%s", (id,))
+            
+            # 3. User na points down (minus) karo (Post karva par 10 aapya hata, to delete par 10 minus)
+            cur.execute("UPDATE users SET score = score - 10 WHERE username=%s", (session["username"],))
+            
             conn.commit()
-
-    cur.execute("SELECT title,description FROM problems WHERE id=%s", (id,))
-    p = cur.fetchone()
-
-    cur.execute("""
-        SELECT username,comment,created_at
-        FROM comments WHERE problem_id=%s ORDER BY id DESC
-    """, (id,))
-    comments = cur.fetchall()
+        except Exception as e:
+            conn.rollback()
+            print(f"Delete Error: {e}")
+    
     cur.close()
-
-    solution_text = f"""
-Problem: {p[0]}
-
-Description: {p[1]}
-
-Suggested Solution:
-• Report to authority
-• Temporary fix
-• Community help
-"""
-
-    return render_template("solution.html",
-                           solution=solution_text,
-                           comments=comments,
-                           problem_id=id)
-
-
-# ---------- LEADERBOARD ----------
+    conn.close()
+    return redirect(url_for('home'))
 @app.route("/leaderboard")
 def leaderboard():
-    if "username" not in session:
-        return redirect("/")
-
-    cur = get_cursor()
-    cur.execute("SELECT username,score FROM users ORDER BY score DESC")
+    if "username" not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT username, score FROM users ORDER BY score DESC LIMIT 10")
     users = cur.fetchall()
     cur.close()
-
+    conn.close()
     return render_template("leaderboard.html", users=users)
 
-
-# ---------- LOGOUT ----------
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/")
+    return redirect(url_for('login'))
 
+@app.route("/problem/<int:id>")
+def problem_detail(id):
+    if "username" not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM problems WHERE id=%s", (id,))
+    p = cur.fetchone()
+    cur.close()
+    conn.close()
+    if p:
+        return render_template("problem_detail.html", problem=p)
+    return "Problem Not Found", 404
 
-# ---------- RUN ----------
+# --- FIX: SOLUTION PAGE ROUTE ---
+@app.route("/solution/<int:id>")
+def solution_page(id):
+    if "username" not in session: return redirect(url_for('login'))
+    conn = get_db_connection()
+    cur = conn.cursor()
+    # Problem details fetch karo
+    cur.execute("SELECT * FROM problems WHERE id=%s", (id,))
+    prob = cur.fetchone()
+    # Related comments fetch karo
+    cur.execute("SELECT * FROM comments WHERE problem_id=%s ORDER BY created_at DESC", (id,))
+    comments = cur.fetchall()
+    cur.close()
+    conn.close()
+    if prob:
+        return render_template("solution.html", problem=prob, solutions=comments)
+    return "Not Found", 404
+
+# --- FIX: POST COMMENT ROUTE ---
+@app.route("/post_comment/<int:id>", methods=["POST"])
+def post_comment(id):
+    if "username" not in session: return redirect(url_for('login'))
+    comment_text = request.form.get("comment")
+    if comment_text:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("INSERT INTO comments (problem_id, username, comment) VALUES (%s, %s, %s)", 
+                        (id, session["username"], comment_text))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            print(f"Error: {e}")
+        finally:
+            cur.close()
+            conn.close()
+    # Redirect to solution_page function name
+    return redirect(url_for('solution_page', id=id))
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        u = request.form.get("username")
+        p = request.form.get("password")
+        m = request.form.get("mobile")
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            # User register karva mate
+            cur.execute("INSERT INTO users (username, password, mobile, score) VALUES (%s, %s, %s, 0)", (u, p, m))
+            conn.commit()
+            return redirect(url_for('login'))
+        except Exception as e:
+            conn.rollback()
+            return render_template("register.html", error="Username already exists!")
+        finally:
+            cur.close()
+            conn.close()
+            
+    return render_template("register.html")
+
 if __name__ == "__main__":
     app.run(debug=True)
-
