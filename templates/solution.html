@@ -23,9 +23,11 @@
         <div class="comment-field">
             <span class="comment-title">Write Comment</span>
 
-            <form method="POST">
-                <textarea name="comment" required></textarea>
-                <button type="submit">Post Comment</button>
+            <form action="/post_comment/{{ problem[0] }}" method="POST">
+                <textarea name="comment" placeholder="Write your solution..." required
+                    style="width: 100%; height: 100px;"></textarea>
+                <br>
+                <button type="submit" class="btn-submit">Post Comment</button>
             </form>
         </div>
 
