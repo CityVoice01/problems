@@ -924,3 +924,7 @@ b {
         font-size: 13px;
     }
 }
+
+.btn-delete:hover {
+    transform: scale(1.2);
+}
